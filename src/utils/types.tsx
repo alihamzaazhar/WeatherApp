@@ -62,3 +62,11 @@ export type Weather = {
   };
 };
 
+export interface WeatherDetailCardProps {
+  weather: Weather;
+  unit: string;
+  onMoreDetails?: () => void;
+  showMoreDetails: boolean;
+}
+
+

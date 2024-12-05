@@ -7,7 +7,7 @@ type Props = {
   onPress: (city: City) => void;
 };
 
-const WeatherCard: React.FC<Props> = ({item, onPress}) => {
+const CityCard: React.FC<Props> = ({item, onPress}) => {
   return (
     <TouchableOpacity style={styles.cityItem} onPress={() => onPress(item)}>
       <Text style={styles.cityName}>{item.name}</Text>
@@ -18,7 +18,7 @@ const WeatherCard: React.FC<Props> = ({item, onPress}) => {
   );
 };
 
-export default WeatherCard;
+export default CityCard;
 
 const styles = StyleSheet.create({
   cityItem: {

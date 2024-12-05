@@ -2,29 +2,25 @@ import React, {useState} from 'react';
 import {
   SafeAreaView,
   StyleSheet,
-  Text,
   TextInput,
   FlatList,
   TouchableOpacity,
   View,
   Alert,
-  Image,
-  Platform,
-  Linking,
 } from 'react-native';
 import citiesData from '../../utils/cities500.json';
 import {City, RootStackParamList} from '../../utils/types';
 import Icon from 'react-native-vector-icons/Ionicons';
-import {API_KEY, convertTemp, tempUnit} from '../../utils/constant';
 import Loader from '../../components/Loader';
 import {NativeStackNavigationProp} from '@react-navigation/native-stack';
 import {RouteProp} from '@react-navigation/native';
 import {useDispatch, useSelector} from 'react-redux';
 import {RootState} from '../../Redux/store';
 import {saveWeather} from '../../Redux/slices/weatherSlice';
-import Geolocation from '@react-native-community/geolocation';
-import { CommonStyles } from '../../utils/styles';
-import WeatherCard from '../../components/WeatherCard';
+import CityCard from '../../components/CityListCard';
+import {getWeather} from '../../utils/api';
+import {getCurrentLocationWeather} from '../../utils/getCurrentLocation';
+import WeatherDetailCard from '../../components/WeatherDetailCard';
 
 const cities: City[] = citiesData as City[];
 
@@ -46,58 +42,30 @@ const HomeScreen: React.FC<Props> = ({navigation}) => {
   const fetchWeather = async (lat: string, lon: string) => {
     setLoading(true);
     try {
-      const response = await fetch(
-        `https://api.openweathermap.org/data/2.5/weather?lat=${lat}&lon=${lon}&units=metric&appid=${API_KEY}`,
-      );
-      const data = await response.json();
-      if (response.ok) {
-        dispatch(saveWeather(data));
-      } else {
-        Alert.alert('Error', data.message);
-      }
-    } catch (error) {
-      Alert.alert('Error', 'Failed to fetch weather data.');
+      const data = await getWeather(lat, lon);
+      dispatch(saveWeather(data));
+    } catch (error: any) {
+      Alert.alert('Error', error.message || 'Failed to fetch weather data.');
     } finally {
       setLoading(false);
     }
   };
 
-  const getCurrentLocationWeather = () => {
-    Geolocation.getCurrentPosition(
-      position => {
-        const {latitude, longitude} = position.coords;
-        fetchWeather(latitude.toString(), longitude.toString());
+  const fetchWeatherForCurrentLocation = () => {
+    setLoading(true);
+    getCurrentLocationWeather(
+      data => {
+        dispatch(saveWeather(data));
+        setLoading(false);
       },
-      error => {
-        if (error.code === 1) {
-          Alert.alert(
-            'Location Permission Denied',
-            'You have denied location access. Please enable it in settings to view the current location’s weather.',
-            [
-              {
-                text: 'Cancel',
-                style: 'cancel',
-              },
-              {
-                text: 'Open Settings',
-                onPress: () => {
-                  if (Platform.OS === 'ios') {
-                    Linking.openURL('app-settings:');
-                  } else {
-                    Linking.openSettings();
-                  }
-                },
-              },
-            ],
-          );
-        } else {
-          Alert.alert(
-            'Error',
-            'Failed to fetch your location. Please try again.',
-          );
-        }
+      errorMessage => {
+        console.error(errorMessage);
+        Alert.alert('Error', errorMessage);
+        setLoading(false);
       },
-      {enableHighAccuracy: false, timeout: 15000, maximumAge: 10000},
+      () => {
+        setLoading(false);
+      },
     );
   };
 
@@ -121,9 +89,15 @@ const HomeScreen: React.FC<Props> = ({navigation}) => {
   };
 
   const renderCityItem = ({item}: {item: City}) => {
-    return (
-      <WeatherCard item={item} onPress={handleCityPress}/>
-    );
+    return <CityCard item={item} onPress={handleCityPress} />;
+  };
+
+  const onSettings = () => {
+    navigation.navigate('SettingsScreen');
+  };
+
+  const onMoreDetails = () => {
+    navigation.navigate('DetailsScreen');
   };
 
   return (
@@ -136,7 +110,7 @@ const HomeScreen: React.FC<Props> = ({navigation}) => {
             value={searchText}
             onChangeText={handleSearch}
           />
-          <TouchableOpacity onPress={getCurrentLocationWeather}>
+          <TouchableOpacity onPress={fetchWeatherForCurrentLocation}>
             <Icon name="location-sharp" size={30} color="black" />
           </TouchableOpacity>
         </View>
@@ -152,41 +126,14 @@ const HomeScreen: React.FC<Props> = ({navigation}) => {
         ) : null}
 
         {recentWeather ? (
-          <View style={CommonStyles.weatherContainer}>
-            <Image
-              source={{
-                uri: `https://openweathermap.org/img/wn/${recentWeather?.weather[0]?.icon}@2x.png`,
-              }}
-              style={CommonStyles.weatherIcon}
-              resizeMode="contain"
-            />
-            <Text style={CommonStyles.weatherText}>{`Temp: ${convertTemp(
-              recentWeather?.main?.temp,
-              unit,
-            ).toFixed(1)}${tempUnit(unit)}`}</Text>
-            <Text style={CommonStyles.weatherDescription}>
-              {recentWeather?.weather[0]?.description?.charAt(0).toUpperCase() +
-                recentWeather?.weather[0]?.description?.slice(1)}
-            </Text>
-            <Text
-              style={
-                CommonStyles.weatherDescription
-              }>{`${recentWeather?.name}, ${recentWeather?.sys?.country}`}</Text>
-            <TouchableOpacity
-              style={styles.btnContainer}
-              onPress={() => {
-                navigation.navigate('DetailsScreen');
-              }}>
-              <Text style={styles.MoreDetailsText}>More Details</Text>
-            </TouchableOpacity>
-          </View>
+          <WeatherDetailCard
+            weather={recentWeather}
+            unit={unit}
+            onMoreDetails={onMoreDetails}
+            showMoreDetails={false}
+          />
         ) : null}
-
-        <TouchableOpacity
-          style={styles.SettingIcon}
-          onPress={() => {
-            navigation.navigate('SettingsScreen');
-          }}>
+        <TouchableOpacity style={styles.SettingIcon} onPress={onSettings}>
           <Icon name="settings" size={50} color={'black'} />
         </TouchableOpacity>
       </SafeAreaView>
@@ -228,19 +175,12 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#ccc',
   },
-  btnContainer: {
-    paddingHorizontal: 30,
-    paddingVertical: 10,
-    backgroundColor: 'rgba(45, 51, 75, 1)',
-    marginTop: 70,
-    borderRadius: 10,
-  },
   MoreDetailsText: {
     color: 'white',
   },
   SettingIcon: {
     position: 'absolute',
-    bottom: 70,
+    bottom: 50,
     right: 20,
   },
 });
